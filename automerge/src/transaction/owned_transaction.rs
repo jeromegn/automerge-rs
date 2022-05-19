@@ -87,6 +87,14 @@ impl Transaction {
             self.doc.take().unwrap(),
         )
     }
+
+    pub fn document(&self) -> &Automerge {
+        self.doc.as_ref().unwrap()
+    }
+
+    pub fn document_mut(&mut self) -> &mut Automerge {
+        self.doc.as_mut().unwrap()
+    }
 }
 
 impl Transactable for Transaction {
