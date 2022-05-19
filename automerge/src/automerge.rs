@@ -9,7 +9,9 @@ use crate::keys::Keys;
 use crate::op_observer::OpObserver;
 use crate::op_set::OpSet;
 use crate::parents::Parents;
-use crate::transaction::{self, CommitOptions, Failure, Success, Transaction, TransactionInner};
+use crate::transaction::{
+    self, CommitOptions, Failure, OwnedTransaction, Success, Transaction, TransactionInner,
+};
 use crate::types::{
     ActorId, ChangeHash, Clock, ElemId, Export, Exportable, Key, ObjId, Op, OpId, OpType,
     ScalarValue, Value,
@@ -110,6 +112,13 @@ impl Automerge {
         Transaction {
             inner: Some(self.transaction_inner()),
             doc: self,
+        }
+    }
+
+    pub fn transaction_owned(mut self) -> OwnedTransaction {
+        OwnedTransaction {
+            inner: Some(self.transaction_inner()),
+            doc: Some(self),
         }
     }
 
