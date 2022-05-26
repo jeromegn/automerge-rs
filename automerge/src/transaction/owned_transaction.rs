@@ -1,6 +1,7 @@
 use std::ops::RangeBounds;
 
 use crate::exid::ExId;
+use crate::op_set::{OpSet, OpSetTree};
 use crate::{Automerge, ChangeHash, KeysAt, ObjType, OpObserver, Prop, ScalarValue, Value, Values};
 use crate::{AutomergeError, Keys};
 use crate::{ListRange, ListRangeAt, MapRange, MapRangeAt};
@@ -20,14 +21,18 @@ use super::{CommitOptions, Transactable, TransactionInner};
 /// intermediate state.
 /// This is consistent with `?` error handling.
 #[derive(Debug)]
-pub struct Transaction {
+pub struct Transaction<'t, T: OpSetTree<'t>> {
     // this is an option so that we can take it during commit and rollback to prevent it being
     // rolled back during drop.
     pub(crate) inner: Option<TransactionInner>,
-    pub(crate) doc: Option<Automerge>,
+    pub(crate) doc: Option<Automerge<T>>,
+    pub(crate) _marker: std::marker::PhantomData<&'t ()>,
 }
 
-impl Transaction {
+impl<'t, T> Transaction<'t, T>
+where
+    T: OpSetTree<'t>,
+{
     /// Get the heads of the document before this transaction was started.
     pub fn get_heads(&self) -> Vec<ChangeHash> {
         self.doc.as_ref().unwrap().get_heads()
@@ -35,12 +40,14 @@ impl Transaction {
 
     /// Commit the operations performed in this transaction, returning the hashes corresponding to
     /// the new heads.
-    pub fn commit(mut self) -> (ChangeHash, Automerge) {
+    pub fn commit(mut self) -> (ChangeHash, Automerge<T>) {
         (
-            self.inner
-                .take()
-                .unwrap()
-                .commit::<()>(self.doc.as_mut().unwrap(), None, None, None),
+            self.inner.take().unwrap().commit::<(), T>(
+                self.doc.as_mut().unwrap(),
+                None,
+                None,
+                None,
+            ),
             self.doc.take().unwrap(),
         )
     }
@@ -64,7 +71,7 @@ impl Transaction {
     pub fn commit_with<Obs: OpObserver>(
         mut self,
         options: CommitOptions<'_, Obs>,
-    ) -> (ChangeHash, Automerge) {
+    ) -> (ChangeHash, Automerge<T>) {
         (
             self.inner.take().unwrap().commit(
                 self.doc.as_mut().unwrap(),
@@ -78,7 +85,7 @@ impl Transaction {
 
     /// Undo the operations added in this transaction, returning the number of cancelled
     /// operations.
-    pub fn rollback(mut self) -> (usize, Automerge) {
+    pub fn rollback(mut self) -> (usize, Automerge<T>) {
         (
             self.inner
                 .take()
@@ -88,16 +95,20 @@ impl Transaction {
         )
     }
 
-    pub fn document(&self) -> &Automerge {
+    pub fn document(&self) -> &Automerge<T> {
         self.doc.as_ref().unwrap()
     }
 
-    pub fn document_mut(&mut self) -> &mut Automerge {
+    pub fn document_mut(&mut self) -> &mut Automerge<T> {
         self.doc.as_mut().unwrap()
     }
 }
 
-impl Transactable for Transaction {
+impl<'t, T> Transactable<'t> for Transaction<'t, T>
+where
+    T: OpSetTree<'t>,
+{
+    type Tree = T;
     /// Get the number of pending operations in this transaction.
     fn pending_ops(&self) -> usize {
         self.inner.as_ref().unwrap().pending_ops()
@@ -211,11 +222,11 @@ impl Transactable for Transaction {
         )
     }
 
-    fn keys<O: AsRef<ExId>>(&self, obj: O) -> Keys<'_, '_> {
+    fn keys<O: AsRef<ExId>>(&self, obj: O) -> Keys<'_, '_, T> {
         self.doc.as_ref().unwrap().keys(obj)
     }
 
-    fn keys_at<O: AsRef<ExId>>(&self, obj: O, heads: &[ChangeHash]) -> KeysAt<'_, '_> {
+    fn keys_at<O: AsRef<ExId>>(&self, obj: O, heads: &[ChangeHash]) -> KeysAt<'_, '_, T> {
         self.doc.as_ref().unwrap().keys_at(obj, heads)
     }
 
@@ -223,7 +234,7 @@ impl Transactable for Transaction {
         &self,
         obj: O,
         range: R,
-    ) -> MapRange<'_, R> {
+    ) -> MapRange<'_, R, T> {
         self.doc.as_ref().unwrap().map_range(obj, range)
     }
 
@@ -232,7 +243,7 @@ impl Transactable for Transaction {
         obj: O,
         range: R,
         heads: &[ChangeHash],
-    ) -> MapRangeAt<'_, R> {
+    ) -> MapRangeAt<'_, R, T> {
         self.doc.as_ref().unwrap().map_range_at(obj, range, heads)
     }
 
@@ -240,7 +251,7 @@ impl Transactable for Transaction {
         &self,
         obj: O,
         range: R,
-    ) -> ListRange<'_, R> {
+    ) -> ListRange<'_, R, T> {
         self.doc.as_ref().unwrap().list_range(obj, range)
     }
 
@@ -249,15 +260,15 @@ impl Transactable for Transaction {
         obj: O,
         range: R,
         heads: &[ChangeHash],
-    ) -> ListRangeAt<'_, R> {
+    ) -> ListRangeAt<'_, R, T> {
         self.doc.as_ref().unwrap().list_range_at(obj, range, heads)
     }
 
-    fn values<O: AsRef<ExId>>(&self, obj: O) -> Values<'_> {
+    fn values<O: AsRef<ExId>>(&self, obj: O) -> Values<'_, T> {
         self.doc.as_ref().unwrap().values(obj)
     }
 
-    fn values_at<O: AsRef<ExId>>(&self, obj: O, heads: &[ChangeHash]) -> Values<'_> {
+    fn values_at<O: AsRef<ExId>>(&self, obj: O, heads: &[ChangeHash]) -> Values<'_, T> {
         self.doc.as_ref().unwrap().values_at(obj, heads)
     }
 
@@ -323,7 +334,7 @@ impl Transactable for Transaction {
         self.doc.as_ref().unwrap().parent_object(obj)
     }
 
-    fn parents(&self, obj: ExId) -> crate::Parents<'_> {
+    fn parents(&self, obj: ExId) -> crate::Parents<'_, T> {
         self.doc.as_ref().unwrap().parents(obj)
     }
 }
@@ -332,7 +343,10 @@ impl Transactable for Transaction {
 // intermediate state.
 // This defaults to rolling back the transaction to be compatible with `?` error returning before
 // reaching a call to `commit`.
-impl Drop for Transaction {
+impl<'t, T> Drop for Transaction<'t, T>
+where
+    T: OpSetTree<'t>,
+{
     fn drop(&mut self) {
         if let Some(txn) = self.inner.take() {
             if let Some(mut doc) = self.doc.take() {

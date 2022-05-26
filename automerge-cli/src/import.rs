@@ -3,7 +3,7 @@ use automerge::transaction::Transactable;
 
 pub(crate) fn initialize_from_json(
     json_value: &serde_json::Value,
-) -> anyhow::Result<am::AutoCommit> {
+) -> anyhow::Result<am::AutoCommit<am::InMemoryTree>> {
     let mut doc = am::AutoCommit::new();
     match json_value {
         serde_json::Value::Object(m) => {
@@ -15,7 +15,7 @@ pub(crate) fn initialize_from_json(
 }
 
 fn import_map(
-    doc: &mut am::AutoCommit,
+    doc: &mut am::AutoCommit<am::InMemoryTree>,
     obj: &am::ObjId,
     map: &serde_json::Map<String, serde_json::Value>,
 ) -> anyhow::Result<()> {
@@ -55,7 +55,7 @@ fn import_map(
 }
 
 fn import_list(
-    doc: &mut am::AutoCommit,
+    doc: &mut am::AutoCommit<am::InMemoryTree>,
     obj: &am::ObjId,
     list: &[serde_json::Value],
 ) -> anyhow::Result<()> {

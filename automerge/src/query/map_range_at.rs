@@ -26,8 +26,8 @@ pub(crate) struct MapRangeAt<'a, R: RangeBounds<String>> {
     meta: &'a OpSetMetadata,
 }
 
-impl<'a, R: RangeBounds<String>> ValueIter<'a> for MapRangeAt<'a, R> {
-    fn next_value(&mut self, doc: &'a Automerge) -> Option<(Value<'a>, ExId)> {
+impl<'a, R: RangeBounds<String>, T> ValueIter<'a, T> for MapRangeAt<'a, R> {
+    fn next_value(&mut self, doc: &'a Automerge<T>) -> Option<(Value<'a>, ExId)> {
         self.next().map(|(_, val, id)| (val, doc.id_to_exid(id)))
     }
 }

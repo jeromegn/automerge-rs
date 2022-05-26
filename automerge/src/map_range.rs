@@ -4,18 +4,18 @@ use std::ops::RangeBounds;
 use crate::{query, Automerge};
 
 #[derive(Debug)]
-pub struct MapRange<'a, R: RangeBounds<String>> {
+pub struct MapRange<'a, R: RangeBounds<String>, T> {
     range: Option<query::MapRange<'a, R>>,
-    doc: &'a Automerge,
+    doc: &'a Automerge<T>,
 }
 
-impl<'a, R: RangeBounds<String>> MapRange<'a, R> {
-    pub(crate) fn new(doc: &'a Automerge, range: Option<query::MapRange<'a, R>>) -> Self {
+impl<'a, R: RangeBounds<String>, T> MapRange<'a, R, T> {
+    pub(crate) fn new(doc: &'a Automerge<T>, range: Option<query::MapRange<'a, R>>) -> Self {
         Self { range, doc }
     }
 }
 
-impl<'a, R: RangeBounds<String>> Iterator for MapRange<'a, R> {
+impl<'a, R: RangeBounds<String>, T> Iterator for MapRange<'a, R, T> {
     type Item = (&'a str, Value<'a>, ExId);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -26,7 +26,7 @@ impl<'a, R: RangeBounds<String>> Iterator for MapRange<'a, R> {
     }
 }
 
-impl<'a, R: RangeBounds<String>> DoubleEndedIterator for MapRange<'a, R> {
+impl<'a, R: RangeBounds<String>, T> DoubleEndedIterator for MapRange<'a, R, T> {
     fn next_back(&mut self) -> Option<Self::Item> {
         self.range
             .as_mut()?

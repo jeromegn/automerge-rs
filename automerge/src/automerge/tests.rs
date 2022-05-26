@@ -126,8 +126,8 @@ fn test_save_incremental() -> Result<(), AutomergeError> {
 
     assert!(save_b.len() < save_a.len());
 
-    let mut doc_a = Automerge::load(&save_a)?;
-    let mut doc_b = Automerge::load(&save_b)?;
+    let mut doc_a = Automerge::<InMemoryTree>::load(&save_a)?;
+    let mut doc_b = Automerge::<InMemoryTree>::load(&save_b)?;
 
     assert!(doc_a.get_all(ROOT, "baz")? == doc_b.get_all(ROOT, "baz")?);
 
@@ -1084,7 +1084,7 @@ fn delete_nothing_in_map_is_noop() {
     assert_eq!(last_change.len(), 0);
 
     let bytes = doc.save();
-    assert!(Automerge::load(&bytes,).is_ok());
+    assert!(Automerge::<InMemoryTree>::load(&bytes,).is_ok());
 
     let mut tx = doc.transaction();
     tx.put(ROOT, "a", 1).unwrap();
@@ -1118,7 +1118,7 @@ fn loaded_doc_changes_have_hash() {
     tx.commit();
     let hash = doc.get_last_local_change().unwrap().hash;
     let bytes = doc.save();
-    let doc = Automerge::load(&bytes).unwrap();
+    let doc = Automerge::<InMemoryTree>::load(&bytes).unwrap();
     assert_eq!(doc.get_change_by_hash(&hash).unwrap().hash, hash);
 }
 
@@ -1133,7 +1133,7 @@ fn load_change_with_zero_start_op() {
         157, 157, 157, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
         255, 255, 255, 48, 254, 208,
     ];
-    let _ = Automerge::load(bytes);
+    let _ = Automerge::<InMemoryTree>::load(bytes);
 }
 
 #[test]

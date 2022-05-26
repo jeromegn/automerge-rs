@@ -4,15 +4,16 @@ use std::{
     hash::Hash,
 };
 
+use automerge::InMemoryTree;
 use serde::ser::{SerializeMap, SerializeSeq};
 
-pub fn new_doc() -> automerge::AutoCommit {
+pub fn new_doc() -> automerge::AutoCommit<InMemoryTree> {
     let mut d = automerge::AutoCommit::new();
     d.set_actor(automerge::ActorId::random());
     d
 }
 
-pub fn new_doc_with_actor(actor: automerge::ActorId) -> automerge::AutoCommit {
+pub fn new_doc_with_actor(actor: automerge::ActorId) -> automerge::AutoCommit<InMemoryTree> {
     let mut d = automerge::AutoCommit::new();
     d.set_actor(actor);
     d
@@ -307,12 +308,12 @@ impl serde::Serialize for RealizedObject {
     }
 }
 
-pub fn realize(doc: &automerge::Automerge) -> RealizedObject {
+pub fn realize(doc: &automerge::Automerge<InMemoryTree>) -> RealizedObject {
     realize_obj(doc, &automerge::ROOT, automerge::ObjType::Map)
 }
 
 pub fn realize_prop<P: Into<automerge::Prop>>(
-    doc: &automerge::Automerge,
+    doc: &automerge::Automerge<InMemoryTree>,
     obj_id: &automerge::ObjId,
     prop: P,
 ) -> RealizedObject {
@@ -324,7 +325,7 @@ pub fn realize_prop<P: Into<automerge::Prop>>(
 }
 
 pub fn realize_obj(
-    doc: &automerge::Automerge,
+    doc: &automerge::Automerge<InMemoryTree>,
     obj_id: &automerge::ObjId,
     objtype: automerge::ObjType,
 ) -> RealizedObject {
@@ -348,7 +349,7 @@ pub fn realize_obj(
 }
 
 fn realize_values<K: Into<automerge::Prop>>(
-    doc: &automerge::Automerge,
+    doc: &automerge::Automerge<InMemoryTree>,
     obj_id: &automerge::ObjId,
     key: K,
 ) -> BTreeSet<RealizedObject> {
@@ -413,6 +414,6 @@ impl From<&str> for RealizedObject {
 
 /// Pretty print the contents of a document
 #[allow(dead_code)]
-pub fn pretty_print(doc: &automerge::Automerge) {
+pub fn pretty_print(doc: &automerge::Automerge<InMemoryTree>) {
     println!("{}", serde_json::to_string_pretty(&realize(doc)).unwrap())
 }

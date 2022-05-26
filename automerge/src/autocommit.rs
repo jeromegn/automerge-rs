@@ -2,6 +2,7 @@ use std::ops::RangeBounds;
 
 use crate::exid::ExId;
 use crate::op_observer::OpObserver;
+use crate::op_set::{InMemoryTree, OpSetTree};
 use crate::transaction::{CommitOptions, Transactable};
 use crate::{
     sync, ApplyOptions, Keys, KeysAt, ListRange, ListRangeAt, MapRange, MapRangeAt, ObjType,
@@ -14,28 +15,33 @@ use crate::{
 
 /// An automerge document that automatically manages transactions.
 #[derive(Debug, Clone)]
-pub struct AutoCommit {
-    doc: Automerge,
+pub struct AutoCommit<T> {
+    doc: Automerge<T>,
     transaction: Option<TransactionInner>,
 }
 
-impl Default for AutoCommit {
+impl Default for AutoCommit<InMemoryTree> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl AutoCommit {
+impl AutoCommit<InMemoryTree> {
     pub fn new() -> Self {
         Self {
             doc: Automerge::new(),
             transaction: None,
         }
     }
+}
 
+impl<'t, T> AutoCommit<T>
+where
+    T: OpSetTree<'t> + Default + Clone,
+{
     /// Get the inner document.
     #[doc(hidden)]
-    pub fn document(&mut self) -> &Automerge {
+    pub fn document(&mut self) -> &Automerge<T> {
         self.ensure_transaction_closed();
         &self.doc
     }
@@ -80,7 +86,7 @@ impl AutoCommit {
 
     fn ensure_transaction_closed(&mut self) {
         if let Some(tx) = self.transaction.take() {
-            tx.commit::<()>(&mut self.doc, None, None, None);
+            tx.commit::<(), T>(&mut self.doc, None, None, None);
         }
     }
 
@@ -149,7 +155,7 @@ impl AutoCommit {
         self.doc.merge_with(&mut other.doc, options)
     }
 
-    pub fn save(&mut self) -> Vec<u8> {
+    pub fn save(&'t mut self) -> Vec<u8> {
         self.ensure_transaction_closed();
         self.doc.save()
     }
@@ -190,7 +196,7 @@ impl AutoCommit {
         self.doc.import(s)
     }
 
-    pub fn dump(&mut self) {
+    pub fn dump(&'t mut self) {
         self.ensure_transaction_closed();
         self.doc.dump()
     }
@@ -272,7 +278,11 @@ impl AutoCommit {
     }
 }
 
-impl Transactable for AutoCommit {
+impl<'t, T> Transactable<'t> for AutoCommit<T>
+where
+    T: OpSetTree<'t> + Default + Clone,
+{
+    type Tree = T;
     fn pending_ops(&self) -> usize {
         self.transaction
             .as_ref()
@@ -285,11 +295,11 @@ impl Transactable for AutoCommit {
     // PropAt::()
     // NthAt::()
 
-    fn keys<O: AsRef<ExId>>(&self, obj: O) -> Keys<'_, '_> {
+    fn keys<O: AsRef<ExId>>(&self, obj: O) -> Keys<'_, '_, T> {
         self.doc.keys(obj)
     }
 
-    fn keys_at<O: AsRef<ExId>>(&self, obj: O, heads: &[ChangeHash]) -> KeysAt<'_, '_> {
+    fn keys_at<O: AsRef<ExId>>(&self, obj: O, heads: &[ChangeHash]) -> KeysAt<'_, '_, T> {
         self.doc.keys_at(obj, heads)
     }
 
@@ -297,7 +307,7 @@ impl Transactable for AutoCommit {
         &self,
         obj: O,
         range: R,
-    ) -> MapRange<'_, R> {
+    ) -> MapRange<'_, R, T> {
         self.doc.map_range(obj, range)
     }
 
@@ -306,7 +316,7 @@ impl Transactable for AutoCommit {
         obj: O,
         range: R,
         heads: &[ChangeHash],
-    ) -> MapRangeAt<'_, R> {
+    ) -> MapRangeAt<'_, R, T> {
         self.doc.map_range_at(obj, range, heads)
     }
 
@@ -314,7 +324,7 @@ impl Transactable for AutoCommit {
         &self,
         obj: O,
         range: R,
-    ) -> ListRange<'_, R> {
+    ) -> ListRange<'_, R, T> {
         self.doc.list_range(obj, range)
     }
 
@@ -323,15 +333,15 @@ impl Transactable for AutoCommit {
         obj: O,
         range: R,
         heads: &[ChangeHash],
-    ) -> ListRangeAt<'_, R> {
+    ) -> ListRangeAt<'_, R, T> {
         self.doc.list_range_at(obj, range, heads)
     }
 
-    fn values<O: AsRef<ExId>>(&self, obj: O) -> Values<'_> {
+    fn values<O: AsRef<ExId>>(&self, obj: O) -> Values<'_, T> {
         self.doc.values(obj)
     }
 
-    fn values_at<O: AsRef<ExId>>(&self, obj: O, heads: &[ChangeHash]) -> Values<'_> {
+    fn values_at<O: AsRef<ExId>>(&self, obj: O, heads: &[ChangeHash]) -> Values<'_, T> {
         self.doc.values_at(obj, heads)
     }
 
@@ -497,7 +507,7 @@ impl Transactable for AutoCommit {
         self.doc.parent_object(obj)
     }
 
-    fn parents(&self, obj: ExId) -> Parents<'_> {
+    fn parents(&self, obj: ExId) -> Parents<'_, T> {
         self.doc.parents(obj)
     }
 }

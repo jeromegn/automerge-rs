@@ -51,7 +51,10 @@ pub(super) fn merge<W: std::io::Write>(inputs: Inputs, mut output: W) -> Result<
     Ok(())
 }
 
-fn load_path(backend: &mut am::Automerge, path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+fn load_path(
+    backend: &mut am::Automerge<am::InMemoryTree>,
+    path: &Path,
+) -> Result<(), Box<dyn std::error::Error>> {
     let input = std::fs::read(path).map_err(Box::new)?;
     backend.load_incremental(&input).map_err(Box::new)?;
     Ok(())

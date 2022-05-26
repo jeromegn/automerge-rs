@@ -2,6 +2,7 @@ use automerge::transaction::CommitOptions;
 use automerge::transaction::Transactable;
 use automerge::Automerge;
 use automerge::AutomergeError;
+use automerge::InMemoryTree;
 use automerge::Patch;
 use automerge::VecOpObserver;
 use automerge::ROOT;
@@ -40,7 +41,7 @@ fn main() {
     get_changes(&doc, observer.take_patches());
 }
 
-fn get_changes(doc: &Automerge, patches: Vec<Patch>) {
+fn get_changes(doc: &Automerge<InMemoryTree>, patches: Vec<Patch>) {
     for patch in patches {
         match patch {
             Patch::Put {

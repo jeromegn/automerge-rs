@@ -1,6 +1,7 @@
 use std::ops::RangeBounds;
 
 use crate::exid::ExId;
+use crate::op_set::OpSetTree;
 use crate::{Automerge, ChangeHash, KeysAt, ObjType, OpObserver, Prop, ScalarValue, Value, Values};
 use crate::{AutomergeError, Keys};
 use crate::{ListRange, ListRangeAt, MapRange, MapRangeAt};
@@ -20,14 +21,17 @@ use super::{CommitOptions, Transactable, TransactionInner};
 /// intermediate state.
 /// This is consistent with `?` error handling.
 #[derive(Debug)]
-pub struct Transaction<'a> {
+pub struct Transaction<'a, T: OpSetTree<'a>> {
     // this is an option so that we can take it during commit and rollback to prevent it being
     // rolled back during drop.
     pub(crate) inner: Option<TransactionInner>,
-    pub(crate) doc: &'a mut Automerge,
+    pub(crate) doc: &'a mut Automerge<T>,
 }
 
-impl<'a> Transaction<'a> {
+impl<'a, T> Transaction<'a, T>
+where
+    T: OpSetTree<'a>,
+{
     /// Get the heads of the document before this transaction was started.
     pub fn get_heads(&self) -> Vec<ChangeHash> {
         self.doc.get_heads()
@@ -39,7 +43,7 @@ impl<'a> Transaction<'a> {
         self.inner
             .take()
             .unwrap()
-            .commit::<()>(self.doc, None, None, None)
+            .commit::<(), T>(self.doc, None, None, None)
     }
 
     /// Commit the operations in this transaction with some options.
@@ -74,7 +78,11 @@ impl<'a> Transaction<'a> {
     }
 }
 
-impl<'a> Transactable for Transaction<'a> {
+impl<'a, T> Transactable<'a> for Transaction<'a, T>
+where
+    T: OpSetTree<'a>,
+{
+    type Tree = T;
     /// Get the number of pending operations in this transaction.
     fn pending_ops(&self) -> usize {
         self.inner.as_ref().unwrap().pending_ops()
@@ -179,11 +187,11 @@ impl<'a> Transactable for Transaction<'a> {
             .splice(self.doc, obj.as_ref(), pos, del, vals)
     }
 
-    fn keys<O: AsRef<ExId>>(&self, obj: O) -> Keys<'_, '_> {
+    fn keys<O: AsRef<ExId>>(&self, obj: O) -> Keys<'_, '_, T> {
         self.doc.keys(obj)
     }
 
-    fn keys_at<O: AsRef<ExId>>(&self, obj: O, heads: &[ChangeHash]) -> KeysAt<'_, '_> {
+    fn keys_at<O: AsRef<ExId>>(&self, obj: O, heads: &[ChangeHash]) -> KeysAt<'_, '_, T> {
         self.doc.keys_at(obj, heads)
     }
 
@@ -191,7 +199,7 @@ impl<'a> Transactable for Transaction<'a> {
         &self,
         obj: O,
         range: R,
-    ) -> MapRange<'_, R> {
+    ) -> MapRange<'_, R, T> {
         self.doc.map_range(obj, range)
     }
 
@@ -200,7 +208,7 @@ impl<'a> Transactable for Transaction<'a> {
         obj: O,
         range: R,
         heads: &[ChangeHash],
-    ) -> MapRangeAt<'_, R> {
+    ) -> MapRangeAt<'_, R, T> {
         self.doc.map_range_at(obj, range, heads)
     }
 
@@ -208,7 +216,7 @@ impl<'a> Transactable for Transaction<'a> {
         &self,
         obj: O,
         range: R,
-    ) -> ListRange<'_, R> {
+    ) -> ListRange<'_, R, T> {
         self.doc.list_range(obj, range)
     }
 
@@ -217,15 +225,15 @@ impl<'a> Transactable for Transaction<'a> {
         obj: O,
         range: R,
         heads: &[ChangeHash],
-    ) -> ListRangeAt<'_, R> {
+    ) -> ListRangeAt<'_, R, T> {
         self.doc.list_range_at(obj, range, heads)
     }
 
-    fn values<O: AsRef<ExId>>(&self, obj: O) -> Values<'_> {
+    fn values<O: AsRef<ExId>>(&self, obj: O) -> Values<'_, T> {
         self.doc.values(obj)
     }
 
-    fn values_at<O: AsRef<ExId>>(&self, obj: O, heads: &[ChangeHash]) -> Values<'_> {
+    fn values_at<O: AsRef<ExId>>(&self, obj: O, heads: &[ChangeHash]) -> Values<'_, T> {
         self.doc.values_at(obj, heads)
     }
 
@@ -291,7 +299,7 @@ impl<'a> Transactable for Transaction<'a> {
         self.doc.parent_object(obj)
     }
 
-    fn parents(&self, obj: ExId) -> crate::Parents<'_> {
+    fn parents(&self, obj: ExId) -> crate::Parents<'_, T> {
         self.doc.parents(obj)
     }
 }
@@ -300,7 +308,10 @@ impl<'a> Transactable for Transaction<'a> {
 // intermediate state.
 // This defaults to rolling back the transaction to be compatible with `?` error returning before
 // reaching a call to `commit`.
-impl<'a> Drop for Transaction<'a> {
+impl<'a, T> Drop for Transaction<'a, T>
+where
+    T: OpSetTree<'a>,
+{
     fn drop(&mut self) {
         if let Some(txn) = self.inner.take() {
             txn.rollback(self.doc);

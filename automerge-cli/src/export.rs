@@ -1,7 +1,10 @@
 use anyhow::Result;
 use automerge as am;
 
-pub(crate) fn map_to_json(doc: &am::Automerge, obj: &am::ObjId) -> serde_json::Value {
+pub(crate) fn map_to_json(
+    doc: &am::Automerge<am::InMemoryTree>,
+    obj: &am::ObjId,
+) -> serde_json::Value {
     let keys = doc.keys(obj);
     let mut map = serde_json::Map::new();
     for k in keys {
@@ -24,7 +27,7 @@ pub(crate) fn map_to_json(doc: &am::Automerge, obj: &am::ObjId) -> serde_json::V
     serde_json::Value::Object(map)
 }
 
-fn list_to_json(doc: &am::Automerge, obj: &am::ObjId) -> serde_json::Value {
+fn list_to_json(doc: &am::Automerge<am::InMemoryTree>, obj: &am::ObjId) -> serde_json::Value {
     let len = doc.length(obj);
     let mut array = Vec::new();
     for i in 0..len {

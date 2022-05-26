@@ -7,8 +7,8 @@ use std::{
 };
 
 use crate::{
-    decoding, decoding::Decoder, encoding::Encodable, ApplyOptions, Automerge, AutomergeError,
-    Change, ChangeHash, OpObserver,
+    decoding, decoding::Decoder, encoding::Encodable, op_set::OpSetTree, ApplyOptions, Automerge,
+    AutomergeError, Change, ChangeHash, OpObserver,
 };
 
 mod bloom;
@@ -20,7 +20,10 @@ pub use state::{Have, State};
 const HASH_SIZE: usize = 32; // 256 bits = 32 bytes
 const MESSAGE_TYPE_SYNC: u8 = 0x42; // first byte of a sync message, for identification
 
-impl Automerge {
+impl<'t, T> Automerge<T>
+where
+    T: OpSetTree<'t>,
+{
     pub fn generate_sync_message(&self, sync_state: &mut State) -> Option<Message> {
         let our_heads = self.get_heads();
 

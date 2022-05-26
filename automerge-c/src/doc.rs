@@ -1,19 +1,20 @@
+use am::InMemoryTree;
 use automerge as am;
 use std::ops::{Deref, DerefMut};
 
 /// \struct AMdoc
 /// \brief A JSON-like CRDT.
 #[derive(Clone)]
-pub struct AMdoc(am::AutoCommit);
+pub struct AMdoc(am::AutoCommit<InMemoryTree>);
 
 impl AMdoc {
-    pub fn new(body: am::AutoCommit) -> Self {
+    pub fn new(body: am::AutoCommit<InMemoryTree>) -> Self {
         Self(body)
     }
 }
 
 impl Deref for AMdoc {
-    type Target = am::AutoCommit;
+    type Target = am::AutoCommit<InMemoryTree>;
 
     fn deref(&self) -> &Self::Target {
         &self.0

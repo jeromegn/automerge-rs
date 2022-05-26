@@ -1,12 +1,15 @@
-use crate::{exid::ExId, Automerge, Prop};
+use crate::{exid::ExId, op_set::OpSetTree, Automerge, Prop};
 
 #[derive(Debug)]
-pub struct Parents<'a> {
+pub struct Parents<'a, T> {
     pub(crate) obj: ExId,
-    pub(crate) doc: &'a Automerge,
+    pub(crate) doc: &'a Automerge<T>,
 }
 
-impl<'a> Iterator for Parents<'a> {
+impl<'a, 't, T> Iterator for Parents<'a, T>
+where
+    T: OpSetTree<'t>,
+{
     type Item = (ExId, Prop);
 
     fn next(&mut self) -> Option<Self::Item> {

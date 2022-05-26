@@ -1,13 +1,16 @@
 use std::ops::RangeBounds;
 
 use crate::exid::ExId;
+use crate::op_set::OpSetTree;
 use crate::{
     AutomergeError, ChangeHash, Keys, KeysAt, ListRange, ListRangeAt, MapRange, MapRangeAt,
     ObjType, Parents, Prop, ScalarValue, Value, Values,
 };
 
 /// A way of mutating a document within a single change.
-pub trait Transactable {
+pub trait Transactable<'t> {
+    type Tree: OpSetTree<'t>;
+
     /// Get the number of pending operations in this transaction.
     fn pending_ops(&self) -> usize;
 
@@ -97,40 +100,40 @@ pub trait Transactable {
     }
 
     /// Get the keys of the given object, it should be a map.
-    fn keys<O: AsRef<ExId>>(&self, obj: O) -> Keys<'_, '_>;
+    fn keys<O: AsRef<ExId>>(&self, obj: O) -> Keys<'_, '_, Self::Tree>;
 
     /// Get the keys of the given object at a point in history.
-    fn keys_at<O: AsRef<ExId>>(&self, obj: O, heads: &[ChangeHash]) -> KeysAt<'_, '_>;
+    fn keys_at<O: AsRef<ExId>>(&self, obj: O, heads: &[ChangeHash]) -> KeysAt<'_, '_, Self::Tree>;
 
     fn map_range<O: AsRef<ExId>, R: RangeBounds<String>>(
         &self,
         obj: O,
         range: R,
-    ) -> MapRange<'_, R>;
+    ) -> MapRange<'_, R, Self::Tree>;
 
     fn map_range_at<O: AsRef<ExId>, R: RangeBounds<String>>(
         &self,
         obj: O,
         range: R,
         heads: &[ChangeHash],
-    ) -> MapRangeAt<'_, R>;
+    ) -> MapRangeAt<'_, R, Self::Tree>;
 
     fn list_range<O: AsRef<ExId>, R: RangeBounds<usize>>(
         &self,
         obj: O,
         range: R,
-    ) -> ListRange<'_, R>;
+    ) -> ListRange<'_, R, Self::Tree>;
 
     fn list_range_at<O: AsRef<ExId>, R: RangeBounds<usize>>(
         &self,
         obj: O,
         range: R,
         heads: &[ChangeHash],
-    ) -> ListRangeAt<'_, R>;
+    ) -> ListRangeAt<'_, R, Self::Tree>;
 
-    fn values<O: AsRef<ExId>>(&self, obj: O) -> Values<'_>;
+    fn values<O: AsRef<ExId>>(&self, obj: O) -> Values<'_, Self::Tree>;
 
-    fn values_at<O: AsRef<ExId>>(&self, obj: O, heads: &[ChangeHash]) -> Values<'_>;
+    fn values_at<O: AsRef<ExId>>(&self, obj: O, heads: &[ChangeHash]) -> Values<'_, Self::Tree>;
 
     /// Get the length of the given object.
     fn length<O: AsRef<ExId>>(&self, obj: O) -> usize;
@@ -183,7 +186,7 @@ pub trait Transactable {
     /// at in that object.
     fn parent_object<O: AsRef<ExId>>(&self, obj: O) -> Option<(ExId, Prop)>;
 
-    fn parents(&self, obj: ExId) -> Parents<'_>;
+    fn parents(&self, obj: ExId) -> Parents<'_, Self::Tree>;
 
     fn path_to_object<O: AsRef<ExId>>(&self, obj: O) -> Vec<(ExId, Prop)> {
         let mut path = self.parents(obj.as_ref().clone()).collect::<Vec<_>>();

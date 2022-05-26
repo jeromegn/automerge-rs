@@ -20,8 +20,8 @@ pub(crate) struct ListRangeAt<'a, R: RangeBounds<usize>> {
     window: VisWindow,
 }
 
-impl<'a, R: RangeBounds<usize>> ValueIter<'a> for ListRangeAt<'a, R> {
-    fn next_value(&mut self, doc: &'a Automerge) -> Option<(Value<'a>, ExId)> {
+impl<'a, R: RangeBounds<usize>, T> ValueIter<'a, T> for ListRangeAt<'a, R> {
+    fn next_value(&mut self, doc: &'a Automerge<T>) -> Option<(Value<'a>, ExId)> {
         self.next().map(|(_, val, id)| (val, doc.id_to_exid(id)))
     }
 }

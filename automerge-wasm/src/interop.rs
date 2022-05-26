@@ -328,7 +328,7 @@ pub(crate) fn get_heads(heads: Option<Array>) -> Option<Vec<ChangeHash>> {
     heads.ok()
 }
 
-pub(crate) fn map_to_js(doc: &am::AutoCommit, obj: &ObjId) -> JsValue {
+pub(crate) fn map_to_js(doc: &am::AutoCommit<am::InMemoryTree>, obj: &ObjId) -> JsValue {
     let keys = doc.keys(obj);
     let map = Object::new();
     for k in keys {
@@ -354,7 +354,11 @@ pub(crate) fn map_to_js(doc: &am::AutoCommit, obj: &ObjId) -> JsValue {
     map.into()
 }
 
-pub(crate) fn map_to_js_at(doc: &am::AutoCommit, obj: &ObjId, heads: &[ChangeHash]) -> JsValue {
+pub(crate) fn map_to_js_at(
+    doc: &am::AutoCommit<am::InMemoryTree>,
+    obj: &ObjId,
+    heads: &[ChangeHash],
+) -> JsValue {
     let keys = doc.keys(obj);
     let map = Object::new();
     for k in keys {
@@ -380,7 +384,7 @@ pub(crate) fn map_to_js_at(doc: &am::AutoCommit, obj: &ObjId, heads: &[ChangeHas
     map.into()
 }
 
-pub(crate) fn list_to_js(doc: &am::AutoCommit, obj: &ObjId) -> JsValue {
+pub(crate) fn list_to_js(doc: &am::AutoCommit<am::InMemoryTree>, obj: &ObjId) -> JsValue {
     let len = doc.length(obj);
     let array = Array::new();
     for i in 0..len {
@@ -406,7 +410,11 @@ pub(crate) fn list_to_js(doc: &am::AutoCommit, obj: &ObjId) -> JsValue {
     array.into()
 }
 
-pub(crate) fn list_to_js_at(doc: &am::AutoCommit, obj: &ObjId, heads: &[ChangeHash]) -> JsValue {
+pub(crate) fn list_to_js_at(
+    doc: &am::AutoCommit<am::InMemoryTree>,
+    obj: &ObjId,
+    heads: &[ChangeHash],
+) -> JsValue {
     let len = doc.length(obj);
     let array = Array::new();
     for i in 0..len {

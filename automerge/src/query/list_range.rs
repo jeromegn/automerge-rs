@@ -31,8 +31,8 @@ impl<'a, R: RangeBounds<usize>> ListRange<'a, R> {
     }
 }
 
-impl<'a, R: RangeBounds<usize>> ValueIter<'a> for ListRange<'a, R> {
-    fn next_value(&mut self, doc: &'a Automerge) -> Option<(Value<'a>, ExId)> {
+impl<'a, R: RangeBounds<usize>, T> ValueIter<'a, T> for ListRange<'a, R> {
+    fn next_value(&mut self, doc: &'a Automerge<T>) -> Option<(Value<'a>, ExId)> {
         self.next().map(|(_, val, id)| (val, doc.id_to_exid(id)))
     }
 }

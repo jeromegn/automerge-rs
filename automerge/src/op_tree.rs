@@ -22,7 +22,7 @@ mod iter;
 pub(crate) use iter::OpTreeIter;
 
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct OpTree {
+pub struct OpTree {
     pub(crate) internal: OpTreeInternal,
     pub(crate) objtype: ObjType,
     /// The id of the parent object, root has no parent.

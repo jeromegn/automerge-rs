@@ -1,21 +1,24 @@
-use crate::{exid::ExId, Value};
+use crate::{exid::ExId, op_set::OpSetTree, Value};
 use std::ops::RangeBounds;
 
 use crate::{query, Automerge};
 
 #[derive(Debug)]
-pub struct ListRangeAt<'a, R: RangeBounds<usize>> {
+pub struct ListRangeAt<'a, R: RangeBounds<usize>, T> {
     range: Option<query::ListRangeAt<'a, R>>,
-    doc: &'a Automerge,
+    doc: &'a Automerge<T>,
 }
 
-impl<'a, R: RangeBounds<usize>> ListRangeAt<'a, R> {
-    pub(crate) fn new(doc: &'a Automerge, range: Option<query::ListRangeAt<'a, R>>) -> Self {
+impl<'a, R: RangeBounds<usize>, T> ListRangeAt<'a, R, T> {
+    pub(crate) fn new(doc: &'a Automerge<T>, range: Option<query::ListRangeAt<'a, R>>) -> Self {
         Self { range, doc }
     }
 }
 
-impl<'a, R: RangeBounds<usize>> Iterator for ListRangeAt<'a, R> {
+impl<'a, R: RangeBounds<usize>, T> Iterator for ListRangeAt<'a, R, T>
+where
+    T: OpSetTree<'a>,
+{
     type Item = (usize, Value<'a>, ExId);
 
     fn next(&mut self) -> Option<Self::Item> {

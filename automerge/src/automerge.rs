@@ -7,7 +7,7 @@ use crate::change::encode_document;
 use crate::exid::ExId;
 use crate::keys::Keys;
 use crate::op_observer::OpObserver;
-use crate::op_set::OpSet;
+use crate::op_set::{InMemoryTree, OpSet, OpSetTree};
 use crate::parents::Parents;
 use crate::transaction::{
     self, CommitOptions, Failure, OwnedTransaction, Success, Transaction, TransactionInner,
@@ -35,7 +35,7 @@ pub(crate) enum Actor {
 
 /// An automerge document.
 #[derive(Debug, Clone)]
-pub struct Automerge {
+pub struct Automerge<T> {
     /// The list of unapplied changes that are not causally ready.
     pub(crate) queue: Vec<Change>,
     /// The history of changes that form this document, topologically sorted too.
@@ -49,22 +49,89 @@ pub struct Automerge {
     /// Heads at the last save.
     pub(crate) saved: Vec<ChangeHash>,
     /// The set of operations that form this document.
-    pub(crate) ops: OpSet,
+    pub(crate) ops: OpSet<T>,
     /// The current actor.
     pub(crate) actor: Actor,
     /// The maximum operation counter this document has seen.
     pub(crate) max_op: u64,
 }
 
-impl Automerge {
+impl<'t, T> Automerge<T>
+where
+    T: OpSetTree<'t> + Clone,
+{
+    /// Fork this document at the current point for use by a different actor.
+    pub fn fork(&self) -> Automerge<T> {
+        let mut f = self.clone();
+        f.set_actor(ActorId::random());
+        f
+    }
+}
+
+impl Automerge<InMemoryTree> {
     /// Create a new document with a random actor id.
     pub fn new() -> Self {
+        Self::new_op_tree(Default::default())
+    }
+}
+
+impl<'t, T> Automerge<T>
+where
+    T: OpSetTree<'t> + Default,
+{
+    /// Fork this document at the give heads
+    pub fn fork_at(&self, heads: &[ChangeHash]) -> Result<Self, AutomergeError> {
+        let mut seen = heads.iter().cloned().collect::<HashSet<_>>();
+        let mut heads = heads.to_vec();
+        let mut changes = vec![];
+        while let Some(hash) = heads.pop() {
+            if let Some(idx) = self.history_index.get(&hash) {
+                let change = &self.history[*idx];
+                for dep in &change.deps {
+                    if !seen.contains(dep) {
+                        heads.push(*dep);
+                    }
+                }
+                changes.push(change);
+                seen.insert(hash);
+            } else {
+                return Err(AutomergeError::InvalidHash(hash));
+            }
+        }
+        let mut f = Self::new_op_tree(Default::default());
+        f.set_actor(ActorId::random());
+        f.apply_changes(changes.into_iter().rev().cloned())?;
+        Ok(f)
+    }
+
+    /// Load a document.
+    pub fn load_with<Obs: OpObserver>(
+        data: &[u8],
+        options: ApplyOptions<'_, Obs>,
+    ) -> Result<Self, AutomergeError> {
+        let changes = Change::load_document(data)?;
+        let mut doc = Self::new_op_tree(Default::default());
+        doc.apply_changes_with(changes, options)?;
+        Ok(doc)
+    }
+
+    /// Load a document.
+    pub fn load(data: &[u8]) -> Result<Self, AutomergeError> {
+        Self::load_with::<()>(data, ApplyOptions::default())
+    }
+}
+
+impl<'t, T> Automerge<T>
+where
+    T: OpSetTree<'t>,
+{
+    pub fn new_op_tree(trees: T) -> Self {
         Automerge {
             queue: vec![],
             history: vec![],
             history_index: HashMap::new(),
             states: HashMap::new(),
-            ops: Default::default(),
+            ops: OpSet::new(trees),
             deps: Default::default(),
             saved: Default::default(),
             actor: Actor::Unused(ActorId::random()),
@@ -108,17 +175,18 @@ impl Automerge {
     }
 
     /// Start a transaction.
-    pub fn transaction(&mut self) -> Transaction<'_> {
+    pub fn transaction(&'t mut self) -> Transaction<'t, T> {
         Transaction {
             inner: Some(self.transaction_inner()),
             doc: self,
         }
     }
 
-    pub fn transaction_owned(mut self) -> OwnedTransaction {
+    pub fn transaction_owned(mut self) -> OwnedTransaction<'t, T> {
         OwnedTransaction {
             inner: Some(self.transaction_inner()),
             doc: Some(self),
+            _marker: Default::default(),
         }
     }
 
@@ -149,9 +217,9 @@ impl Automerge {
 
     /// Run a transaction on this document in a closure, automatically handling commit or rollback
     /// afterwards.
-    pub fn transact<F, O, E>(&mut self, f: F) -> transaction::Result<O, E>
+    pub fn transact<F, O, E>(&'t mut self, f: F) -> transaction::Result<O, E>
     where
-        F: FnOnce(&mut Transaction<'_>) -> Result<O, E>,
+        F: FnOnce(&mut Transaction<'t, T>) -> Result<O, E>,
     {
         let mut tx = self.transaction();
         let result = f(&mut tx);
@@ -168,9 +236,9 @@ impl Automerge {
     }
 
     /// Like [`Self::transact`] but with a function for generating the commit options.
-    pub fn transact_with<'a, F, O, E, C, Obs>(&mut self, c: C, f: F) -> transaction::Result<O, E>
+    pub fn transact_with<'a, F, O, E, C, Obs>(&'t mut self, c: C, f: F) -> transaction::Result<O, E>
     where
-        F: FnOnce(&mut Transaction<'_>) -> Result<O, E>,
+        F: FnOnce(&mut Transaction<'t, T>) -> Result<O, E>,
         C: FnOnce(&O) -> CommitOptions<'a, Obs>,
         Obs: 'a + OpObserver,
     {
@@ -187,38 +255,6 @@ impl Automerge {
                 cancelled: tx.rollback(),
             }),
         }
-    }
-
-    /// Fork this document at the current point for use by a different actor.
-    pub fn fork(&self) -> Self {
-        let mut f = self.clone();
-        f.set_actor(ActorId::random());
-        f
-    }
-
-    /// Fork this document at the give heads
-    pub fn fork_at(&self, heads: &[ChangeHash]) -> Result<Self, AutomergeError> {
-        let mut seen = heads.iter().cloned().collect::<HashSet<_>>();
-        let mut heads = heads.to_vec();
-        let mut changes = vec![];
-        while let Some(hash) = heads.pop() {
-            if let Some(idx) = self.history_index.get(&hash) {
-                let change = &self.history[*idx];
-                for dep in &change.deps {
-                    if !seen.contains(dep) {
-                        heads.push(*dep);
-                    }
-                }
-                changes.push(change);
-                seen.insert(hash);
-            } else {
-                return Err(AutomergeError::InvalidHash(hash));
-            }
-        }
-        let mut f = Self::new();
-        f.set_actor(ActorId::random());
-        f.apply_changes(changes.into_iter().rev().cloned())?;
-        Ok(f)
     }
 
     // KeysAt::()
@@ -244,7 +280,7 @@ impl Automerge {
     }
 
     /// Get an iterator over the parents of an object.
-    pub fn parents(&self, obj: ExId) -> Parents<'_> {
+    pub fn parents(&self, obj: ExId) -> Parents<'_, T> {
         Parents { obj, doc: self }
     }
 
@@ -273,7 +309,7 @@ impl Automerge {
     ///
     /// For a map this returns the keys of the map.
     /// For a list this returns the element ids (opids) encoded as strings.
-    pub fn keys<O: AsRef<ExId>>(&self, obj: O) -> Keys<'_, '_> {
+    pub fn keys<O: AsRef<ExId>>(&self, obj: O) -> Keys<'_, '_, T> {
         if let Ok(obj) = self.exid_to_obj(obj.as_ref()) {
             let iter_keys = self.ops.keys(obj);
             Keys::new(self, iter_keys)
@@ -283,7 +319,7 @@ impl Automerge {
     }
 
     /// Historical version of [`keys`](Self::keys).
-    pub fn keys_at<O: AsRef<ExId>>(&self, obj: O, heads: &[ChangeHash]) -> KeysAt<'_, '_> {
+    pub fn keys_at<O: AsRef<ExId>>(&self, obj: O, heads: &[ChangeHash]) -> KeysAt<'_, '_, T> {
         if let Ok(obj) = self.exid_to_obj(obj.as_ref()) {
             let clock = self.clock_at(heads);
             KeysAt::new(self, self.ops.keys_at(obj, clock))
@@ -297,7 +333,7 @@ impl Automerge {
         &self,
         obj: O,
         range: R,
-    ) -> MapRange<'_, R> {
+    ) -> MapRange<'_, R, T> {
         if let Ok(obj) = self.exid_to_obj(obj.as_ref()) {
             MapRange::new(self, self.ops.map_range(obj, range))
         } else {
@@ -311,7 +347,7 @@ impl Automerge {
         obj: O,
         range: R,
         heads: &[ChangeHash],
-    ) -> MapRangeAt<'_, R> {
+    ) -> MapRangeAt<'_, R, T> {
         if let Ok(obj) = self.exid_to_obj(obj.as_ref()) {
             let clock = self.clock_at(heads);
             let iter_range = self.ops.map_range_at(obj, range, clock);
@@ -326,7 +362,7 @@ impl Automerge {
         &self,
         obj: O,
         range: R,
-    ) -> ListRange<'_, R> {
+    ) -> ListRange<'_, R, T> {
         if let Ok(obj) = self.exid_to_obj(obj.as_ref()) {
             ListRange::new(self, self.ops.list_range(obj, range))
         } else {
@@ -340,7 +376,7 @@ impl Automerge {
         obj: O,
         range: R,
         heads: &[ChangeHash],
-    ) -> ListRangeAt<'_, R> {
+    ) -> ListRangeAt<'_, R, T> {
         if let Ok(obj) = self.exid_to_obj(obj.as_ref()) {
             let clock = self.clock_at(heads);
             let iter_range = self.ops.list_range_at(obj, range, clock);
@@ -350,7 +386,7 @@ impl Automerge {
         }
     }
 
-    pub fn values<O: AsRef<ExId>>(&self, obj: O) -> Values<'_> {
+    pub fn values<O: AsRef<ExId>>(&self, obj: O) -> Values<'_, T> {
         if let Ok(obj) = self.exid_to_obj(obj.as_ref()) {
             match self.ops.object_type(&obj) {
                 Some(t) if t.is_sequence() => Values::new(self, self.ops.list_range(obj, ..)),
@@ -362,7 +398,7 @@ impl Automerge {
         }
     }
 
-    pub fn values_at<O: AsRef<ExId>>(&self, obj: O, heads: &[ChangeHash]) -> Values<'_> {
+    pub fn values_at<O: AsRef<ExId>>(&self, obj: O, heads: &[ChangeHash]) -> Values<'_, T> {
         if let Ok(obj) = self.exid_to_obj(obj.as_ref()) {
             let clock = self.clock_at(heads);
             match self.ops.object_type(&obj) {
@@ -416,32 +452,6 @@ impl Automerge {
     pub fn object_type<O: AsRef<ExId>>(&self, obj: O) -> Option<ObjType> {
         let obj = self.exid_to_obj(obj.as_ref()).ok()?;
         self.ops.object_type(&obj)
-    }
-
-    pub(crate) fn exid_to_obj(&self, id: &ExId) -> Result<ObjId, AutomergeError> {
-        match id {
-            ExId::Root => Ok(ObjId::root()),
-            ExId::Id(ctr, actor, idx) => {
-                // do a direct get here b/c this could be foriegn and not be within the array
-                // bounds
-                if self.ops.m.actors.cache.get(*idx) == Some(actor) {
-                    Ok(ObjId(OpId(*ctr, *idx)))
-                } else {
-                    // FIXME - make a real error
-                    let idx = self
-                        .ops
-                        .m
-                        .actors
-                        .lookup(actor)
-                        .ok_or(AutomergeError::Fail)?;
-                    Ok(ObjId(OpId(*ctr, idx)))
-                }
-            }
-        }
-    }
-
-    pub(crate) fn id_to_exid(&self, id: OpId) -> ExId {
-        self.ops.id_to_exid(id)
     }
 
     /// Get the string represented by the given text object.
@@ -575,17 +585,18 @@ impl Automerge {
     }
 
     /// Load a document.
-    pub fn load(data: &[u8]) -> Result<Self, AutomergeError> {
-        Self::load_with::<()>(data, ApplyOptions::default())
+    pub fn load_tree(data: &[u8], tree: T) -> Result<Self, AutomergeError> {
+        Self::load_with_tree::<()>(data, ApplyOptions::default(), tree)
     }
 
     /// Load a document.
-    pub fn load_with<Obs: OpObserver>(
+    pub fn load_with_tree<Obs: OpObserver>(
         data: &[u8],
         options: ApplyOptions<'_, Obs>,
+        tree: T,
     ) -> Result<Self, AutomergeError> {
         let changes = Change::load_document(data)?;
-        let mut doc = Self::new();
+        let mut doc = Self::new_op_tree(tree);
         doc.apply_changes_with(changes, options)?;
         Ok(doc)
     }
@@ -747,7 +758,7 @@ impl Automerge {
     }
 
     /// Save the entirety of this document in a compact form.
-    pub fn save(&mut self) -> Vec<u8> {
+    pub fn save(&'t mut self) -> Vec<u8> {
         let heads = self.get_heads();
         let c = self.history.iter();
         let ops = self.ops.iter();
@@ -1055,7 +1066,7 @@ impl Automerge {
         }
     }
 
-    pub fn dump(&self) {
+    pub fn dump(&'t self) {
         log!(
             "  {:12} {:12} {:12} {:12} {:12} {:12}",
             "id",
@@ -1098,7 +1109,35 @@ impl Automerge {
     }
 }
 
-impl Default for Automerge {
+impl<T> Automerge<T> {
+    pub(crate) fn id_to_exid(&self, id: OpId) -> ExId {
+        self.ops.id_to_exid(id)
+    }
+
+    pub(crate) fn exid_to_obj(&self, id: &ExId) -> Result<ObjId, AutomergeError> {
+        match id {
+            ExId::Root => Ok(ObjId::root()),
+            ExId::Id(ctr, actor, idx) => {
+                // do a direct get here b/c this could be foriegn and not be within the array
+                // bounds
+                if self.ops.m.actors.cache.get(*idx) == Some(actor) {
+                    Ok(ObjId(OpId(*ctr, *idx)))
+                } else {
+                    // FIXME - make a real error
+                    let idx = self
+                        .ops
+                        .m
+                        .actors
+                        .lookup(actor)
+                        .ok_or(AutomergeError::Fail)?;
+                    Ok(ObjId(OpId(*ctr, idx)))
+                }
+            }
+        }
+    }
+}
+
+impl Default for Automerge<InMemoryTree> {
     fn default() -> Self {
         Self::new()
     }

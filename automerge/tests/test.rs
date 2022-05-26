@@ -1,7 +1,7 @@
 use automerge::transaction::Transactable;
 use automerge::{
-    ActorId, ApplyOptions, AutoCommit, Automerge, AutomergeError, ObjType, ScalarValue, Value,
-    VecOpObserver, ROOT,
+    ActorId, ApplyOptions, AutoCommit, Automerge, AutomergeError, InMemoryTree, ObjType,
+    ScalarValue, Value, VecOpObserver, ROOT,
 };
 
 mod helpers;
@@ -916,7 +916,7 @@ fn list_counter_del() -> Result<(), automerge::AutomergeError> {
 
     assert_eq!(doc1.length(&list), 2);
 
-    let doc4 = AutoCommit::load(&doc1.save())?;
+    let doc4 = AutoCommit::<InMemoryTree>::load(&doc1.save())?;
 
     assert_eq!(doc4.length(&list), 2);
 
@@ -924,7 +924,7 @@ fn list_counter_del() -> Result<(), automerge::AutomergeError> {
 
     assert_eq!(doc1.length(&list), 1);
 
-    let doc5 = AutoCommit::load(&doc1.save())?;
+    let doc5 = AutoCommit::<InMemoryTree>::load(&doc1.save())?;
 
     assert_eq!(doc5.length(&list), 1);
 

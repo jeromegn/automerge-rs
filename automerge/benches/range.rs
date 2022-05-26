@@ -1,7 +1,7 @@
-use automerge::{transaction::Transactable, Automerge, ROOT};
+use automerge::{transaction::Transactable, Automerge, InMemoryTree, ROOT};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
-fn doc(n: u64) -> Automerge {
+fn doc(n: u64) -> Automerge<InMemoryTree> {
     let mut doc = Automerge::new();
     let mut tx = doc.transaction();
     for i in 0..n {
@@ -11,22 +11,22 @@ fn doc(n: u64) -> Automerge {
     doc
 }
 
-fn range(doc: &Automerge) {
+fn range(doc: &Automerge<InMemoryTree>) {
     let range = doc.values(ROOT);
     range.for_each(drop);
 }
 
-fn range_rev(doc: &Automerge) {
+fn range_rev(doc: &Automerge<InMemoryTree>) {
     let range = doc.values(ROOT).rev();
     range.for_each(drop);
 }
 
-fn range_at(doc: &Automerge) {
+fn range_at(doc: &Automerge<InMemoryTree>) {
     let range = doc.values_at(ROOT, &doc.get_heads());
     range.for_each(drop);
 }
 
-fn range_at_rev(doc: &Automerge) {
+fn range_at_rev(doc: &Automerge<InMemoryTree>) {
     let range = doc.values_at(ROOT, &doc.get_heads()).rev();
     range.for_each(drop);
 }

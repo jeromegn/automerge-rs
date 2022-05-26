@@ -10,21 +10,60 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::ops::RangeBounds;
 
-pub(crate) type OpSet = OpSetInternal;
+pub(crate) type OpSet<T> = OpSetInternal<T>;
 
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct OpSetInternal {
+pub(crate) struct OpSetInternal<T> {
     /// The map of objects to their type and ops.
-    trees: HashMap<ObjId, OpTree, FxBuildHasher>,
+    trees: T,
     /// The number of operations in the opset.
     length: usize,
     /// Metadata about the operations in this opset.
     pub(crate) m: OpSetMetadata,
 }
 
-impl OpSetInternal {
-    pub(crate) fn new() -> Self {
-        let mut trees: HashMap<_, _, _> = Default::default();
+pub trait OpSetTree<'t> {
+    type Iter: Iterator<Item = (&'t ObjId, &'t OpTree)>;
+
+    fn insert(&mut self, id: ObjId, tree: OpTree);
+    fn get(&self, id: &ObjId) -> Option<&OpTree>;
+    fn get_mut(&mut self, id: &ObjId) -> Option<&mut OpTree>;
+    fn remove(&mut self, id: &ObjId) -> Option<OpTree>;
+    fn iter(&'t self) -> Self::Iter;
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct InMemoryTree(HashMap<ObjId, OpTree, FxBuildHasher>);
+
+impl<'t> OpSetTree<'t> for InMemoryTree {
+    type Iter = std::collections::hash_map::Iter<'t, ObjId, OpTree>;
+    fn insert(&mut self, id: ObjId, tree: OpTree) {
+        self.0.insert(id, tree);
+    }
+
+    fn get(&self, id: &ObjId) -> Option<&OpTree> {
+        self.0.get(id)
+    }
+
+    fn get_mut(&mut self, id: &ObjId) -> Option<&mut OpTree> {
+        self.0.get_mut(id)
+    }
+
+    fn remove(&mut self, id: &ObjId) -> Option<OpTree> {
+        self.0.remove(id)
+    }
+
+    fn iter(&'t self) -> Self::Iter {
+        self.0.iter()
+    }
+}
+
+impl<'t, T> OpSetInternal<T>
+where
+    T: OpSetTree<'t>,
+{
+    pub(crate) fn new(mut trees: T) -> Self {
+        // let mut trees: HashMap<_, _, _> = Default::default();
         trees.insert(ObjId::root(), OpTree::new());
         OpSetInternal {
             trees,
@@ -36,15 +75,7 @@ impl OpSetInternal {
         }
     }
 
-    pub(crate) fn id_to_exid(&self, id: OpId) -> ExId {
-        if id == types::ROOT {
-            ExId::Root
-        } else {
-            ExId::Id(id.0, self.m.actors.cache[id.1].clone(), id.1)
-        }
-    }
-
-    pub(crate) fn iter(&self) -> Iter<'_> {
+    pub(crate) fn iter(&'t self) -> Iter<'t> {
         let mut objs: Vec<_> = self.trees.iter().collect();
         objs.sort_by(|a, b| self.m.lamport_cmp((a.0).0, (b.0).0));
         Iter {
@@ -279,13 +310,26 @@ impl OpSetInternal {
     }
 }
 
-impl Default for OpSetInternal {
-    fn default() -> Self {
-        Self::new()
+impl<T> OpSetInternal<T> {
+    pub(crate) fn id_to_exid(&self, id: OpId) -> ExId {
+        if id == types::ROOT {
+            ExId::Root
+        } else {
+            ExId::Id(id.0, self.m.actors.cache[id.1].clone(), id.1)
+        }
     }
 }
 
-impl<'a> IntoIterator for &'a OpSetInternal {
+impl Default for OpSetInternal<InMemoryTree> {
+    fn default() -> Self {
+        Self::new(InMemoryTree::default())
+    }
+}
+
+impl<'a, T> IntoIterator for &'a OpSetInternal<T>
+where
+    T: OpSetTree<'a>,
+{
     type Item = (&'a ObjId, &'a Op);
 
     type IntoIter = Iter<'a>;

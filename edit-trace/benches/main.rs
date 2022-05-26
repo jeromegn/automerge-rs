@@ -1,8 +1,8 @@
-use automerge::{transaction::Transactable, AutoCommit, Automerge, ObjType, ROOT};
+use automerge::{transaction::Transactable, AutoCommit, Automerge, InMemoryTree, ObjType, ROOT};
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use std::fs;
 
-fn replay_trace_tx(commands: Vec<(usize, usize, String)>) -> Automerge {
+fn replay_trace_tx(commands: Vec<(usize, usize, String)>) -> Automerge<InMemoryTree> {
     let mut doc = Automerge::new();
     let mut tx = doc.transaction();
     let text = tx.put_object(ROOT, "text", ObjType::Text).unwrap();
@@ -13,7 +13,7 @@ fn replay_trace_tx(commands: Vec<(usize, usize, String)>) -> Automerge {
     doc
 }
 
-fn replay_trace_autotx(commands: Vec<(usize, usize, String)>) -> AutoCommit {
+fn replay_trace_autotx(commands: Vec<(usize, usize, String)>) -> AutoCommit<InMemoryTree> {
     let mut doc = AutoCommit::new();
     let text = doc.put_object(ROOT, "text", ObjType::Text).unwrap();
     for (pos, del, vals) in commands {
@@ -23,20 +23,20 @@ fn replay_trace_autotx(commands: Vec<(usize, usize, String)>) -> AutoCommit {
     doc
 }
 
-fn save_trace(mut doc: Automerge) {
+fn save_trace(mut doc: Automerge<InMemoryTree>) {
     doc.save();
 }
 
-fn save_trace_autotx(mut doc: AutoCommit) {
+fn save_trace_autotx(mut doc: AutoCommit<InMemoryTree>) {
     doc.save();
 }
 
 fn load_trace(bytes: &[u8]) {
-    Automerge::load(bytes).unwrap();
+    Automerge::<InMemoryTree>::load(bytes).unwrap();
 }
 
 fn load_trace_autotx(bytes: &[u8]) {
-    AutoCommit::load(bytes).unwrap();
+    AutoCommit::<InMemoryTree>::load(bytes).unwrap();
 }
 
 fn bench(c: &mut Criterion) {

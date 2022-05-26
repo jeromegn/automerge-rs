@@ -1,7 +1,7 @@
-use automerge::{transaction::Transactable, Automerge, ScalarValue, ROOT};
+use automerge::{transaction::Transactable, Automerge, InMemoryTree, ScalarValue, ROOT};
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 
-fn repeated_increment(n: u64) -> Automerge {
+fn repeated_increment(n: u64) -> Automerge<InMemoryTree> {
     let mut doc = Automerge::new();
     let mut tx = doc.transaction();
     tx.put(ROOT, "counter", ScalarValue::counter(0)).unwrap();
@@ -12,7 +12,7 @@ fn repeated_increment(n: u64) -> Automerge {
     doc
 }
 
-fn repeated_put(n: u64) -> Automerge {
+fn repeated_put(n: u64) -> Automerge<InMemoryTree> {
     let mut doc = Automerge::new();
     let mut tx = doc.transaction();
     for i in 0..n {
@@ -22,7 +22,7 @@ fn repeated_put(n: u64) -> Automerge {
     doc
 }
 
-fn increasing_put(n: u64) -> Automerge {
+fn increasing_put(n: u64) -> Automerge<InMemoryTree> {
     let mut doc = Automerge::new();
     let mut tx = doc.transaction();
     for i in 0..n {
@@ -32,7 +32,7 @@ fn increasing_put(n: u64) -> Automerge {
     doc
 }
 
-fn decreasing_put(n: u64) -> Automerge {
+fn decreasing_put(n: u64) -> Automerge<InMemoryTree> {
     let mut doc = Automerge::new();
     let mut tx = doc.transaction();
     for i in (0..n).rev() {
@@ -129,7 +129,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::new("repeated put", size), size, |b, &size| {
             b.iter_batched(
                 || repeated_put(size).save(),
-                |bytes| Automerge::load(&bytes).unwrap(),
+                |bytes| Automerge::<InMemoryTree>::load(&bytes).unwrap(),
                 criterion::BatchSize::LargeInput,
             )
         });
@@ -139,7 +139,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             |b, &size| {
                 b.iter_batched(
                     || repeated_increment(size).save(),
-                    |bytes| Automerge::load(&bytes).unwrap(),
+                    |bytes| Automerge::<InMemoryTree>::load(&bytes).unwrap(),
                     criterion::BatchSize::LargeInput,
                 )
             },
@@ -152,7 +152,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             |b, &size| {
                 b.iter_batched(
                     || increasing_put(size).save(),
-                    |bytes| Automerge::load(&bytes).unwrap(),
+                    |bytes| Automerge::<InMemoryTree>::load(&bytes).unwrap(),
                     criterion::BatchSize::LargeInput,
                 )
             },
@@ -165,7 +165,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             |b, &size| {
                 b.iter_batched(
                     || decreasing_put(size).save(),
-                    |bytes| Automerge::load(&bytes).unwrap(),
+                    |bytes| Automerge::<InMemoryTree>::load(&bytes).unwrap(),
                     criterion::BatchSize::LargeInput,
                 )
             },

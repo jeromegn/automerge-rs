@@ -2,6 +2,7 @@ use std::num::NonZeroU64;
 
 use crate::automerge::Actor;
 use crate::exid::ExId;
+use crate::op_set::OpSetTree;
 use crate::query::{self, OpIdSearch};
 use crate::types::{Key, ObjId, OpId};
 use crate::{change::export_change, types::Op, Automerge, ChangeHash, Prop};
@@ -27,9 +28,9 @@ impl TransactionInner {
 
     /// Commit the operations performed in this transaction, returning the hashes corresponding to
     /// the new heads.
-    pub(crate) fn commit<Obs: OpObserver>(
+    pub(crate) fn commit<'t, Obs: OpObserver, T: OpSetTree<'t>>(
         mut self,
-        doc: &mut Automerge,
+        doc: &mut Automerge<T>,
         message: Option<String>,
         time: Option<i64>,
         op_observer: Option<&mut Obs>,
@@ -72,7 +73,7 @@ impl TransactionInner {
 
     /// Undo the operations added in this transaction, returning the number of cancelled
     /// operations.
-    pub(crate) fn rollback(self, doc: &mut Automerge) -> usize {
+    pub(crate) fn rollback<'t, T: OpSetTree<'t>>(self, doc: &mut Automerge<T>) -> usize {
         let num = self.pending_ops();
         // remove in reverse order so sets are removed before makes etc...
         for (obj, _prop, op) in self.operations.into_iter().rev() {
@@ -108,9 +109,9 @@ impl TransactionInner {
     /// - The object does not exist
     /// - The key is the wrong type for the object
     /// - The key does not exist in the object
-    pub(crate) fn put<P: Into<Prop>, V: Into<ScalarValue>>(
+    pub(crate) fn put<'t, P: Into<Prop>, V: Into<ScalarValue>, T: OpSetTree<'t>>(
         &mut self,
-        doc: &mut Automerge,
+        doc: &mut Automerge<T>,
         ex_obj: &ExId,
         prop: P,
         value: V,
@@ -135,9 +136,9 @@ impl TransactionInner {
     /// - The object does not exist
     /// - The key is the wrong type for the object
     /// - The key does not exist in the object
-    pub(crate) fn put_object<P: Into<Prop>>(
+    pub(crate) fn put_object<'t, P: Into<Prop>, T: OpSetTree<'t>>(
         &mut self,
-        doc: &mut Automerge,
+        doc: &mut Automerge<T>,
         ex_obj: &ExId,
         prop: P,
         value: ObjType,
@@ -153,9 +154,9 @@ impl TransactionInner {
         OpId(self.start_op.get() + self.pending_ops() as u64, self.actor)
     }
 
-    fn insert_local_op(
+    fn insert_local_op<'t, T: OpSetTree<'t>>(
         &mut self,
-        doc: &mut Automerge,
+        doc: &mut Automerge<T>,
         prop: Prop,
         op: Op,
         pos: usize,
@@ -175,9 +176,9 @@ impl TransactionInner {
         self.operations.push((obj, prop, op));
     }
 
-    pub(crate) fn insert<V: Into<ScalarValue>>(
+    pub(crate) fn insert<'t, V: Into<ScalarValue>, T: OpSetTree<'t>>(
         &mut self,
-        doc: &mut Automerge,
+        doc: &mut Automerge<T>,
         ex_obj: &ExId,
         index: usize,
         value: V,
@@ -188,9 +189,9 @@ impl TransactionInner {
         Ok(())
     }
 
-    pub(crate) fn insert_object(
+    pub(crate) fn insert_object<'t, T: OpSetTree<'t>>(
         &mut self,
-        doc: &mut Automerge,
+        doc: &mut Automerge<T>,
         ex_obj: &ExId,
         index: usize,
         value: ObjType,
@@ -201,9 +202,9 @@ impl TransactionInner {
         Ok(id)
     }
 
-    fn do_insert(
+    fn do_insert<'t, T: OpSetTree<'t>>(
         &mut self,
-        doc: &mut Automerge,
+        doc: &mut Automerge<T>,
         obj: ObjId,
         index: usize,
         action: OpType,
@@ -229,9 +230,9 @@ impl TransactionInner {
         Ok(id)
     }
 
-    pub(crate) fn local_op(
+    pub(crate) fn local_op<'t, T: OpSetTree<'t>>(
         &mut self,
-        doc: &mut Automerge,
+        doc: &mut Automerge<T>,
         obj: ObjId,
         prop: Prop,
         action: OpType,
@@ -242,9 +243,9 @@ impl TransactionInner {
         }
     }
 
-    fn local_map_op(
+    fn local_map_op<'t, T: OpSetTree<'t>>(
         &mut self,
-        doc: &mut Automerge,
+        doc: &mut Automerge<T>,
         obj: ObjId,
         prop: String,
         action: OpType,
@@ -290,9 +291,9 @@ impl TransactionInner {
         Ok(Some(id))
     }
 
-    fn local_list_op(
+    fn local_list_op<'t, T: OpSetTree<'t>>(
         &mut self,
-        doc: &mut Automerge,
+        doc: &mut Automerge<T>,
         obj: ObjId,
         index: usize,
         action: OpType,
@@ -329,9 +330,9 @@ impl TransactionInner {
         Ok(Some(id))
     }
 
-    pub(crate) fn increment<P: Into<Prop>>(
+    pub(crate) fn increment<'t, P: Into<Prop>, T: OpSetTree<'t>>(
         &mut self,
-        doc: &mut Automerge,
+        doc: &mut Automerge<T>,
         obj: &ExId,
         prop: P,
         value: i64,
@@ -341,9 +342,9 @@ impl TransactionInner {
         Ok(())
     }
 
-    pub(crate) fn delete<P: Into<Prop>>(
+    pub(crate) fn delete<'t, P: Into<Prop>, T: OpSetTree<'t>>(
         &mut self,
-        doc: &mut Automerge,
+        doc: &mut Automerge<T>,
         ex_obj: &ExId,
         prop: P,
     ) -> Result<(), AutomergeError> {
@@ -355,9 +356,9 @@ impl TransactionInner {
 
     /// Splice new elements into the given sequence. Returns a vector of the OpIds used to insert
     /// the new elements
-    pub(crate) fn splice(
+    pub(crate) fn splice<'t, T: OpSetTree<'t>>(
         &mut self,
-        doc: &mut Automerge,
+        doc: &mut Automerge<T>,
         ex_obj: &ExId,
         mut pos: usize,
         del: usize,

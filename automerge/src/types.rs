@@ -363,7 +363,7 @@ impl Key {
 pub(crate) struct OpId(pub(crate) u64, pub(crate) usize);
 
 #[derive(Debug, Clone, Copy, PartialOrd, Eq, PartialEq, Ord, Hash, Default)]
-pub(crate) struct ObjId(pub(crate) OpId);
+pub struct ObjId(pub(crate) OpId);
 
 impl ObjId {
     pub(crate) const fn root() -> Self {

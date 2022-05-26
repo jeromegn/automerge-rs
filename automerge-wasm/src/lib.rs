@@ -63,7 +63,7 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 #[wasm_bindgen]
 #[derive(Debug)]
 pub struct Automerge {
-    doc: automerge::AutoCommit,
+    doc: automerge::AutoCommit<am::InMemoryTree>,
     observer: Option<VecOpObserver>,
 }
 

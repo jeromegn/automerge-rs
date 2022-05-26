@@ -2,31 +2,31 @@ use crate::exid::ExId;
 use crate::{Automerge, Value};
 use std::fmt;
 
-pub struct Values<'a> {
-    range: Box<dyn 'a + ValueIter<'a>>,
-    doc: &'a Automerge,
+pub struct Values<'a, T> {
+    range: Box<dyn 'a + ValueIter<'a, T>>,
+    doc: &'a Automerge<T>,
 }
 
-impl<'a> fmt::Debug for Values<'a> {
+impl<'a, T> fmt::Debug for Values<'a, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Values").finish()
     }
 }
 
-pub(crate) trait ValueIter<'a> {
-    fn next_value(&mut self, doc: &'a Automerge) -> Option<(Value<'a>, ExId)>;
+pub(crate) trait ValueIter<'a, T> {
+    fn next_value(&mut self, doc: &'a Automerge<T>) -> Option<(Value<'a>, ExId)>;
 }
 
 pub(crate) struct NoValues {}
 
-impl<'a> ValueIter<'a> for NoValues {
-    fn next_value(&mut self, _doc: &'a Automerge) -> Option<(Value<'a>, ExId)> {
+impl<'a, T> ValueIter<'a, T> for NoValues {
+    fn next_value(&mut self, _doc: &'a Automerge<T>) -> Option<(Value<'a>, ExId)> {
         None
     }
 }
 
-impl<'a> Values<'a> {
-    pub(crate) fn new<R: 'a + ValueIter<'a>>(doc: &'a Automerge, range: Option<R>) -> Self {
+impl<'a, T> Values<'a, T> {
+    pub(crate) fn new<R: 'a + ValueIter<'a, T>>(doc: &'a Automerge<T>, range: Option<R>) -> Self {
         if let Some(range) = range {
             Self {
                 range: Box::new(range),
@@ -37,7 +37,7 @@ impl<'a> Values<'a> {
         }
     }
 
-    pub(crate) fn empty(doc: &'a Automerge) -> Self {
+    pub(crate) fn empty(doc: &'a Automerge<T>) -> Self {
         Self {
             range: Box::new(NoValues {}),
             doc,
@@ -45,7 +45,7 @@ impl<'a> Values<'a> {
     }
 }
 
-impl<'a> Iterator for Values<'a> {
+impl<'a, T> Iterator for Values<'a, T> {
     type Item = (Value<'a>, ExId);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -53,7 +53,7 @@ impl<'a> Iterator for Values<'a> {
     }
 }
 
-impl<'a> DoubleEndedIterator for Values<'a> {
+impl<'a, T> DoubleEndedIterator for Values<'a, T> {
     fn next_back(&mut self) -> Option<Self::Item> {
         unimplemented!()
     }
