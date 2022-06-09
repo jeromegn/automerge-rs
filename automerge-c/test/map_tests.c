@@ -13,6 +13,42 @@
 #include "group_state.h"
 #include "macro_utils.h"
 
+static void test_AMmapIncrement(void** state) {
+    GroupState* group_state = *state;
+    AMresult* res = AMmapPutCounter(group_state->doc, AM_ROOT, "Counter", 0);
+    if (AMresultStatus(res) != AM_STATUS_OK) {
+        fail_msg("%s", AMerrorMessage(res));
+    }
+    assert_int_equal(AMresultSize(res), 0);
+    assert_int_equal(AMresultValue(res).tag, AM_VALUE_VOID);
+    AMfree(res);
+    res = AMmapGet(group_state->doc, AM_ROOT, "Counter");
+    if (AMresultStatus(res) != AM_STATUS_OK) {
+        fail_msg("%s", AMerrorMessage(res));
+    }
+    assert_int_equal(AMresultSize(res), 1);
+    AMvalue value = AMresultValue(res);
+    assert_int_equal(value.tag, AM_VALUE_COUNTER);
+    assert_int_equal(value.counter, 0);
+    AMfree(res);
+    res = AMmapIncrement(group_state->doc, AM_ROOT, "Counter", 3);
+    if (AMresultStatus(res) != AM_STATUS_OK) {
+        fail_msg("%s", AMerrorMessage(res));
+    }
+    assert_int_equal(AMresultSize(res), 0);
+    assert_int_equal(AMresultValue(res).tag, AM_VALUE_VOID);
+    AMfree(res);
+    res = AMmapGet(group_state->doc, AM_ROOT, "Counter");
+    if (AMresultStatus(res) != AM_STATUS_OK) {
+        fail_msg("%s", AMerrorMessage(res));
+    }
+    assert_int_equal(AMresultSize(res), 1);
+    value = AMresultValue(res);
+    assert_int_equal(value.tag, AM_VALUE_COUNTER);
+    assert_int_equal(value.counter, 3);
+    AMfree(res);
+}
+
 #define test_AMmapPut(suffix) test_AMmapPut ## suffix
 
 #define static_void_test_AMmapPut(suffix, member, scalar_value)               \
@@ -167,8 +203,9 @@ static_void_test_AMmapPut(Timestamp, timestamp, INT64_MAX)
 
 static_void_test_AMmapPut(Uint, uint, UINT64_MAX)
 
-int run_AMmapPut_tests(void) {
+int run_map_tests(void) {
     const struct CMUnitTest tests[] = {
+        cmocka_unit_test(test_AMmapIncrement),
         cmocka_unit_test(test_AMmapPut(Bool)),
         cmocka_unit_test(test_AMmapPutBytes),
         cmocka_unit_test(test_AMmapPut(Counter)),

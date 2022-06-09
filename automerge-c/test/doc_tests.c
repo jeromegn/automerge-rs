@@ -100,7 +100,7 @@ static void test_AMputActorHex(void **state) {
     AMfree(res);
 }
 
-int run_AMdoc_property_tests(void) {
+int run_doc_tests(void) {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test_setup_teardown(test_AMputActor, setup, teardown),
         cmocka_unit_test_setup_teardown(test_AMputActorHex, setup, teardown),

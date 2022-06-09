@@ -1199,18 +1199,15 @@ fn load_broken_list() {
     for action in actions {
         match action {
             Action::InsertText(index, c) => {
-                println!("inserting {} at {}", c, index);
                 tx.insert(&list, index, c).unwrap();
             }
             Action::DelText(index) => {
-                println!("deleting at {} ", index);
                 tx.delete(&list, index).unwrap();
             }
         }
     }
     tx.commit();
     let bytes = doc.save();
-    println!("doc2 time");
     let mut doc2 = Automerge::load(&bytes).unwrap();
     let bytes2 = doc2.save();
     assert_eq!(doc.text(&list).unwrap(), doc2.text(&list).unwrap());
@@ -1252,18 +1249,15 @@ fn load_broken_list_short() {
     for action in actions {
         match action {
             Action::InsertText(index, c) => {
-                println!("inserting {} at {}", c, index);
                 tx.insert(&list, index, c).unwrap();
             }
             Action::DelText(index) => {
-                println!("deleting at {} ", index);
                 tx.delete(&list, index).unwrap();
             }
         }
     }
     tx.commit();
     let bytes = doc.save();
-    println!("doc2 time");
     let mut doc2 = Automerge::load(&bytes).unwrap();
     let bytes2 = doc2.save();
     assert_eq!(doc.text(&list).unwrap(), doc2.text(&list).unwrap());
@@ -1473,7 +1467,7 @@ fn observe_counter_change_application() {
     doc.put(ROOT, "counter", ScalarValue::counter(1)).unwrap();
     doc.increment(ROOT, "counter", 2).unwrap();
     doc.increment(ROOT, "counter", 5).unwrap();
-    let changes = doc.get_changes(&[]).into_iter().cloned().collect();
+    let changes = doc.get_changes(&[]).unwrap().into_iter().cloned();
 
     let mut new_doc = AutoCommit::new();
     let mut observer = VecOpObserver::default();
@@ -1507,4 +1501,15 @@ fn observe_counter_change_application() {
             }
         ]
     );
+}
+
+#[test]
+fn get_changes_heads_empty() {
+    let mut doc = AutoCommit::new();
+    doc.put(ROOT, "key1", 1).unwrap();
+    doc.commit();
+    doc.put(ROOT, "key2", 1).unwrap();
+    doc.commit();
+    let heads = doc.get_heads();
+    assert_eq!(doc.get_changes(&heads).unwrap(), Vec::<&Change>::new());
 }

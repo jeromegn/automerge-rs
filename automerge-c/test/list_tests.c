@@ -13,6 +13,42 @@
 #include "group_state.h"
 #include "macro_utils.h"
 
+static void test_AMlistIncrement(void** state) {
+    GroupState* group_state = *state;
+    AMresult* res = AMlistPutCounter(group_state->doc, AM_ROOT, 0, true, 0);
+    if (AMresultStatus(res) != AM_STATUS_OK) {
+        fail_msg("%s", AMerrorMessage(res));
+    }
+    assert_int_equal(AMresultSize(res), 0);
+    assert_int_equal(AMresultValue(res).tag, AM_VALUE_VOID);
+    AMfree(res);
+    res = AMlistGet(group_state->doc, AM_ROOT, 0);
+    if (AMresultStatus(res) != AM_STATUS_OK) {
+        fail_msg("%s", AMerrorMessage(res));
+    }
+    assert_int_equal(AMresultSize(res), 1);
+    AMvalue value = AMresultValue(res);
+    assert_int_equal(value.tag, AM_VALUE_COUNTER);
+    assert_int_equal(value.counter, 0);
+    AMfree(res);
+    res = AMlistIncrement(group_state->doc, AM_ROOT, 0, 3);
+    if (AMresultStatus(res) != AM_STATUS_OK) {
+        fail_msg("%s", AMerrorMessage(res));
+    }
+    assert_int_equal(AMresultSize(res), 0);
+    assert_int_equal(AMresultValue(res).tag, AM_VALUE_VOID);
+    AMfree(res);
+    res = AMlistGet(group_state->doc, AM_ROOT, 0);
+    if (AMresultStatus(res) != AM_STATUS_OK) {
+        fail_msg("%s", AMerrorMessage(res));
+    }
+    assert_int_equal(AMresultSize(res), 1);
+    value = AMresultValue(res);
+    assert_int_equal(value.tag, AM_VALUE_COUNTER);
+    assert_int_equal(value.counter, 3);
+    AMfree(res);
+}
+
 #define test_AMlistPut(suffix, mode) test_AMlistPut ## suffix ## _ ## mode
 
 #define static_void_test_AMlistPut(suffix, mode, member, scalar_value)        \
@@ -203,8 +239,9 @@ static_void_test_AMlistPut(Uint, insert, uint, UINT64_MAX)
 
 static_void_test_AMlistPut(Uint, update, uint, UINT64_MAX)
 
-int run_AMlistPut_tests(void) {
+int run_list_tests(void) {
     const struct CMUnitTest tests[] = {
+        cmocka_unit_test(test_AMlistIncrement),
         cmocka_unit_test(test_AMlistPut(Bool, insert)),
         cmocka_unit_test(test_AMlistPut(Bool, update)),
         cmocka_unit_test(test_AMlistPutBytes(insert)),
